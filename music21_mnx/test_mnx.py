@@ -30,6 +30,7 @@ from music21 import note
 from music21 import spanner
 from music21 import stream
 
+import music21_mnx
 from music21_mnx import MNXImporter, MNXExporter, MNXException
 from music21_mnx import base
 
@@ -252,6 +253,14 @@ def _roundTripSignature(score: stream.Score):
 
 class Test(unittest.TestCase):
 
+    def setUp(self):
+        # The converter is not registered on import (by design), so activate it
+        # for the tests that go through music21's converter.parse/.write API.
+        music21_mnx.register()
+
+    def tearDown(self):
+        music21_mnx.unregister()
+
     def testHelloWorld(self):
         score = MNXImporter(HELLO_WORLD).run()
         self.assertEqual(len(score.parts), 1)
@@ -413,13 +422,29 @@ class Test(unittest.TestCase):
                     _roundTripSignature(score2),
                     f'round trip changed content for {name}')
 
-    def testSubConverterAutoRegistered(self):
-        # Importing music21_mnx (done at the top of this module) must have
-        # registered the MNX subconverter with music21's converter subsystem.
+    def testRegisterUnregisterIsIdempotent(self):
         from music21_mnx.converter import ConverterMNX
+        # setUp already registered; register() again must not duplicate.
+        music21_mnx.register()
+        self.assertTrue(music21_mnx.isRegistered())
         formats = converter.Converter().getSubConverterFormats()
         self.assertIn('mnx', formats)
         self.assertIs(formats['mnx'], ConverterMNX)
+
+        # unregister removes it; doing so twice must not raise.
+        music21_mnx.unregister()
+        self.assertFalse(music21_mnx.isRegistered())
+        music21_mnx.unregister()
+        self.assertNotIn('mnx', converter.Converter().getSubConverterFormats())
+
+    def testImportHasNoSideEffect(self):
+        # Importing the package must not, on its own, register the converter.
+        # We cannot re-trigger import here, but we can assert that after a clean
+        # unregister the format is absent until register() is called again.
+        music21_mnx.unregister()
+        self.assertNotIn('mnx', converter.Converter().getSubConverterFormats())
+        music21_mnx.register()
+        self.assertIn('mnx', converter.Converter().getSubConverterFormats())
 
     def testConverterParseAndWrite(self):
         import os

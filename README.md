@@ -20,18 +20,27 @@ uv add music21-mnx        # or: pip install music21-mnx
 
 ## Usage
 
-Importing the package registers a music21 SubConverter as a side effect, so the
-`'mnx'` format then works through music21's normal API:
+Importing the package has **no side effects**. Call `register()` once to plug
+the MNX SubConverter into music21; the `'mnx'` format then works through
+music21's normal API. `unregister()` removes it again.
 
 ```python
-import music21_mnx                       # registers the converter
-from music21 import converter
+import music21_mnx
+music21_mnx.register()                    # activate (import alone does nothing)
 
-score = converter.parse('song.mnx')      # or converter.parse(jsonText, format='mnx')
+from music21 import converter
+score = converter.parse('song.mnx')       # or converter.parse(jsonText, format='mnx')
 score.write('mnx', fp='out.mnx')
+
+music21_mnx.unregister()                   # deactivate when done
 ```
 
-You can also use the converter classes directly:
+`register()`, `unregister()`, and `isRegistered()` are all idempotent. We don't
+register on import on purpose: importing a module shouldn't mutate another
+library's global state behind your back (it would also fire when a linter or doc
+tool merely imports the package).
+
+You can also use the converter classes directly — no registration needed:
 
 ```python
 from music21_mnx import MNXImporter, MNXExporter
@@ -133,7 +142,7 @@ The `examples/` directory holds the 49 example documents shipped with the MNX
 spec, handy for experimentation:
 
 ```bash
-uv run python -c "import music21_mnx; from music21 import converter; \
+uv run python -c "import music21_mnx; music21_mnx.register(); from music21 import converter; \
 converter.parse('examples/slurs.json', format='mnx').show('text')"
 ```
 

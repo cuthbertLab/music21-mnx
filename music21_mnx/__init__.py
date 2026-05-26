@@ -15,17 +15,26 @@ W3C Music Notation Community Group (https://w3c-cg.github.io/mnx/).  Because MNX
 has not yet reached a stable release, this support lives in its own package
 rather than in music21 itself.
 
-Importing the package is all it takes — it registers a SubConverter with
-music21, so the ``'mnx'`` format immediately works through the normal
-:mod:`music21.converter` API::
+Importing the package has **no side effects**.  Call :func:`register` once to
+plug the MNX SubConverter into music21; afterwards the ``'mnx'`` format works
+through the normal :mod:`music21.converter` API.  :func:`unregister` cleanly
+removes it again::
 
-    import music21_mnx                      # registers the converter as a side effect
+    import music21_mnx
+    music21_mnx.register()                  # activate; import alone does nothing
+
     from music21 import converter
-
     score = converter.parse('song.mnx')     # or converter.parse(jsonText, format='mnx')
     score.write('mnx', fp='out.mnx')
 
-You can also use the converter classes directly:
+    music21_mnx.unregister()                # deactivate when you are done
+
+We avoid registering on import on purpose: importing a module should not mutate
+another library's global state behind the user's back (it would also fire when a
+linter or documentation tool merely imports the package).  Both functions are
+idempotent, so calling them more than once is harmless.
+
+You can always use the converter classes directly without registering at all:
 :class:`~music21_mnx.fromMnx.MNXImporter` and
 :class:`~music21_mnx.toMnx.MNXExporter`.
 
@@ -53,6 +62,9 @@ __all__ = [
     'MNXExporter',
     'MNXException',
     'ConverterMNX',
+    'register',
+    'unregister',
+    'isRegistered',
 ]
 
 from music21_mnx import base
@@ -65,14 +77,54 @@ from music21_mnx.toMnx import MNXExporter
 from music21_mnx.converter import ConverterMNX
 
 
-def registerWithMusic21() -> None:
+def isRegistered() -> bool:
     '''
-    Register :class:`~music21_mnx.converter.ConverterMNX` with music21's
-    converter subsystem.  Called automatically on import; safe to call again
-    (music21 checks registered formats by class).
+    Return whether :class:`~music21_mnx.converter.ConverterMNX` is currently
+    registered with music21's converter subsystem.
+
+    >>> import music21_mnx
+    >>> music21_mnx.unregister()
+    >>> music21_mnx.isRegistered()
+    False
+    >>> music21_mnx.register()
+    >>> music21_mnx.isRegistered()
+    True
+    >>> music21_mnx.unregister()
     '''
     from music21 import converter as m21converter
-    m21converter.registerSubConverter(ConverterMNX)
+    return ConverterMNX in m21converter.Converter().subConvertersList()
 
 
-registerWithMusic21()
+def register() -> None:
+    '''
+    Plug the MNX SubConverter into music21 so that the ``'mnx'`` format works
+    through :mod:`music21.converter`.  Idempotent: calling it when already
+    registered does nothing.
+
+    >>> import music21_mnx
+    >>> music21_mnx.register()
+    >>> from music21 import converter
+    >>> 'mnx' in converter.Converter().getSubConverterFormats()
+    True
+    >>> music21_mnx.unregister()
+    '''
+    from music21 import converter as m21converter
+    if not isRegistered():
+        m21converter.registerSubConverter(ConverterMNX)
+
+
+def unregister() -> None:
+    '''
+    Remove the MNX SubConverter from music21.  Idempotent: calling it when not
+    registered does nothing (and never raises).
+
+    >>> import music21_mnx
+    >>> from music21 import converter
+    >>> music21_mnx.register()
+    >>> music21_mnx.unregister()
+    >>> 'mnx' in converter.Converter().getSubConverterFormats()
+    False
+    '''
+    from music21 import converter as m21converter
+    if isRegistered():
+        m21converter.unregisterSubConverter(ConverterMNX)
