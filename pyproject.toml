@@ -1,0 +1,103 @@
+[build-system]
+requires = [
+    "hatchling>=1.8.1",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "music21-mnx"
+dynamic = [
+    "version",
+]
+description = "MNX (W3C music notation JSON format) import and export for music21."
+readme = "README.md"
+license = "BSD-3-Clause"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Sound/Audio :: Conversion",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "music21>=10.3",
+]
+
+[dependency-groups]
+dev = [
+    'jsonschema',
+    'mypy>=1.16.0',
+    'pylint>=3.2.0',
+    'pytest',
+    'ruff',
+]
+
+[[project.authors]]
+name = "Michael Scott Asato Cuthbert"
+email = "michael.asato.cuthbert@gmail.com"
+
+[project.urls]
+Homepage = "https://github.com/cuthbertLab/music21-mnx"
+"MNX spec" = "https://w3c-cg.github.io/mnx/"
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.hatch.version]
+path = "music21_mnx/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["music21_mnx"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "music21_mnx",
+    "examples",
+    "README.md",
+]
+
+[tool.mypy]
+allow_redefinition = true
+warn_no_return = false
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Flake8, pycodestyle, flake8-quotes + pyflakes + bugbear, matching music21.
+select = ['E', 'W', 'Q', 'F', 'B']
+
+dummy-variable-rgx = "^(_.*|unused.*|i|j|counter|junk|dummy)"
+
+ignore = [
+    'E227',  # space around | -- nice to omit in int|str
+    'E731',  # assignment to lambda is sometimes fine
+    'B904',  # "except" and then "raise without from"
+    'B905',  # zip without strict=
+]
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = 'single'
+multiline-quotes = 'single'
+docstring-quotes = 'single'
+
+[tool.pytest.ini_options]
+# Reuse music21's pytest plugin for doctest address-normalization and its
+# house-style "only the class literally named Test" collection filter.
+addopts = ['--doctest-modules', '-p', 'music21.test.pytest_plugin']
+doctest_optionflags = ['NORMALIZE_WHITESPACE', 'ELLIPSIS']
+python_files = ['test_*.py', '*_test.py', 'tests.py']

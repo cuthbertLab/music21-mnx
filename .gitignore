@@ -1,0 +1,22 @@
+*.py[cod]
+__pycache__/
+*$py.class
+
+.mypy_cache/
+**/.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# build artifacts
+build/
+dist/
+*.egg-info/
+
+# uv
+.venv/
+
+# editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
