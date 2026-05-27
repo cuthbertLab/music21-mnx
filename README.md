@@ -50,9 +50,12 @@ mnx_dict = MNXExporter(score).export()    # plain dict
 mnx_text = MNXExporter(score).toJson()
 ```
 
-MNX documents conventionally use the double extension `.mnx.json`. music21 keys
-format detection off the last extension, so use a `.mnx` extension or pass
-`format='mnx'` explicitly for `.mnx.json` files.
+While registered, the converter claims both the `.mnx` and `.json` input
+extensions, so plain `.json` files and the spec's conventional `.mnx.json`
+double extension are both parsed as MNX (music21 keys off the final extension).
+Nothing else in music21 currently claims `.json`, so this is a convenience for
+now; it can be narrowed as the format stabilizes. For a raw string (no file)
+pass `format='mnx'`.
 
 ## Versioning
 

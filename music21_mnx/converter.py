@@ -33,12 +33,17 @@ class ConverterMNX(SubConverter):
     Converter for MNX, the W3C Music Notation Community Group's JSON encoding of
     Common Western Music Notation.  Both import and export are supported.
 
-    Use an ``.mnx`` file extension, or pass ``format='mnx'`` explicitly (MNX
-    documents conventionally use the double extension ``.mnx.json``, which
-    music21 would otherwise treat as plain JSON).
+    While this converter is registered (see :func:`music21_mnx.register`), both
+    the ``.mnx`` and the ``.json`` input extensions are treated as MNX.  That
+    covers plain ``.json`` files as well as the spec's conventional double
+    extension ``.mnx.json`` (music21 keys off the final extension, ``json``).
+    Since nothing else in music21 currently claims ``.json``, this is a
+    convenience for now; it can be narrowed later as the format stabilizes.
+
+    Files are written with the ``.mnx`` extension by default.
     '''
     registerFormats = ('mnx',)
-    registerInputExtensions = ('mnx',)
+    registerInputExtensions = ('mnx', 'json')
     registerShowFormats = ('mnx',)
     registerOutputExtensions = ('mnx',)
 

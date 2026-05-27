@@ -457,6 +457,22 @@ class Test(unittest.TestCase):
         finally:
             os.remove(outPath)
 
+    def testJsonExtensionsRouteToMnx(self):
+        # While registered, both .json and the conventional .mnx.json extension
+        # are parsed as MNX (music21 keys off the final extension).
+        import os
+        import tempfile
+        for suffix in ('.json', '.mnx.json', '.mnx'):
+            with self.subTest(suffix=suffix):
+                fd, path = tempfile.mkstemp(suffix=suffix)
+                try:
+                    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                        f.write(HELLO_WORLD)
+                    score = converter.parse(path)
+                    self.assertEqual(len(score.recurse().notes), 1)
+                finally:
+                    os.remove(path)
+
     def testTinyNotationRoundTrip(self):
         score1 = converter.parse('tinyNotation: 3/4 c4 d8 e8 f4')
         doc = MNXExporter(score1).export()
