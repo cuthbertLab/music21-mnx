@@ -1,16 +1,16 @@
 # music21-mnx
 
-MNX import and export for [music21](https://www.music21.org).
+Alpha-level MNX import and export for [music21](https://www.music21.org).
 
 **MNX** is the [W3C Music Notation Community Group](https://www.w3.org/community/music-notation/)'s
 in-development, JSON-based successor to MusicXML for encoding Common Western
-Music Notation. Because MNX has **not yet reached a stable release**, this
+Music Notation. MNX has **not yet reached a stable release**, so this
 support lives in its own package instead of in music21 itself; pin a version of
-`music21-mnx` to pin the MNX schema revision you target.
+`music21-mnx` to pin the MNX schema revision you target. (If MNX becomes a common format, as we hope,
+this package may become bundled with `music21` as MusicXML, MIDI, etc. are).
 
-> This package was written almost entirely by an AI agent (Claude Opus) under
-> the maintainer's direction. Treat the code as AI-assisted pending human
-> review.
+> This package was written largely by an AI agent (Claude).
+> Treat the code as AI-assisted pending more human review (See AI note below)
 
 ## Install
 
@@ -20,9 +20,8 @@ uv add music21-mnx        # or: pip install music21-mnx
 
 ## Usage
 
-Importing the package has **no side effects**. Call `register()` once to plug
-the MNX SubConverter into music21; the `'mnx'` format then works through
-music21's normal API. `unregister()` removes it again.
+Importing the package has no side effects until you call `music21_mnx.register()`. The `'mnx'` format then works through
+music21's normal API.
 
 ```python
 import music21_mnx
@@ -32,15 +31,10 @@ from music21 import converter
 score = converter.parse('song.mnx')       # or converter.parse(jsonText, format='mnx')
 score.write('mnx', fp='out.mnx')
 
-music21_mnx.unregister()                   # deactivate when done
+music21_mnx.unregister()                   # not needed, but can deactivate when done
 ```
 
-`register()`, `unregister()`, and `isRegistered()` are all idempotent. We don't
-register on import on purpose: importing a module shouldn't mutate another
-library's global state behind your back (it would also fire when a linter or doc
-tool merely imports the package).
-
-You can also use the converter classes directly — no registration needed:
+Advanced users can also use the converter classes directly without calling register
 
 ```python
 from music21_mnx import MNXImporter, MNXExporter
@@ -51,11 +45,11 @@ mnx_text = MNXExporter(score).toJson()
 ```
 
 While registered, the converter claims both the `.mnx` and `.json` input
-extensions, so plain `.json` files and the spec's conventional `.mnx.json`
-double extension are both parsed as MNX (music21 keys off the final extension).
+extensions, so plain `.json` files and the spec's future `.mnx.json`
+double extensions are both parsed as MNX (music21 keys off the final extension).
 Nothing else in music21 currently claims `.json`, so this is a convenience for
 now; it can be narrowed as the format stabilizes. For a raw string (no file)
-pass `format='mnx'`.
+pass `format='mnx'` to converter.
 
 ## Versioning
 
@@ -69,7 +63,7 @@ revision; the test suite validates every exported document against it.
 
 Rather than mirror every MNX object with a class, the package works directly on
 the plain `dict` objects from `json.loads`; `music21_mnx/base.py` provides
-`TypedDict` shapes that document them. Both directions run in **two passes**:
+`TypedDict` shapes that document them. Both directions run in two passes:
 
 - **Import** (`fromMnx.py`): pass 1 builds the `Score` and records every MNX
   `id` in a registry pointing at the music21 object it produced, queuing
@@ -77,42 +71,6 @@ the plain `dict` objects from `json.loads`; `music21_mnx/base.py` provides
   stream.
 - **Export** (`toMnx.py`): pass 1 assigns ids to the notes/events that take part
   in a tie/slur/beam; pass 2 serializes and attaches those id references.
-
-## About the MNX format
-
-An MNX document is a JSON object with three required keys — `mnx`, `global`, and
-`parts` — plus optional `scores` and `layouts`:
-
-```
-root
-├── mnx          {"version": 17, "support": {...}}       (required)
-├── global                                               (required)
-│   └── measures: [ measure-global, ... ]   # one per measure, shared by all parts
-│       └── { time, key, barline, tempos, ending, repeat*, number, ... }
-├── parts        [ part, ... ]                            (required)
-│   └── part: { name, shortName, staves, measures: [ part-measure, ... ] }
-│       └── part-measure: { clefs, beams, sequences, dynamics, ... }
-│           └── sequences: [ sequence, ... ]    # each sequence = one voice
-│               └── content: [ event | grace | tuplet | space | tremolo, ... ]
-│                   └── event: { duration, notes | rest, id, slurs, markings, ... }
-│                       ├── duration: { base, dots }          # symbolic note value
-│                       └── notes: [ { pitch:{step,octave,alter}, id, ties } ]
-├── scores       [ { name, layout, pages, ... } ]         (optional)
-└── layouts      [ system-layout, ... ]                   (optional)
-```
-
-Key points: `global.measures` runs parallel to each part's `measures` by index,
-and attributes persist until changed (so most measures after a change are `{}`).
-An event is pitched (`notes`: one note, or several = a chord) or a `rest`.
-Durations are symbolic (`base` + `dots`). Cross-references use string `id`s: a
-note's `ties` target a note id, an event's `slurs` target an event id, and a
-part-measure's `beams` group event ids (with nested `beams` for secondary and
-partial/hook beams).
-
-The format is under active development — see https://w3c-cg.github.io/mnx/ and
-https://github.com/w3c/mnx. To re-sync to a newer schema, diff the upstream
-`docs/mnx-schema.json` against `music21_mnx/mnx-schema.json` and bump this
-package's minor version to match.
 
 ## Coverage and known limitations
 
@@ -152,3 +110,13 @@ converter.parse('examples/slurs.json', format='mnx').show('text')"
 ## License
 
 BSD 3-Clause, the same as music21. See `LICENSE`.
+
+## Author and Copyright
+
+Copyright © 2026, Michael Scott Asato Cuthbert
+
+## AI Usage
+
+Note from MSAC: at this point this code is heavily AI-Agent generated 
+(almost to the level of vibe coding). As the spec gets further developed more human time will
+be spent inside the code.  For now, use at your own risk. (I suppose, that's true for music21 and almost all free software too!)
