@@ -15,6 +15,11 @@ dist/
 # uv
 .venv/
 
+# agents
+.agents/worktrees
+.claude/worktrees
+.claude/settings.local.json
+
 # editors
 .idea/
 .vscode/
