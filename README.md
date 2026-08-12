@@ -53,8 +53,8 @@ pass `format='mnx'` to converter.
 
 ## Versioning
 
-This package's version tracks the MNX schema version it targets: **`0.17.x`**
-follows **MNX schema version 17** (`music21_mnx.base.MNX_SCHEMA_VERSION`).
+This package's version tracks the MNX schema version it targets: **`0.27.x`**
+follows **MNX schema version 27** (`music21_mnx.base.MNX_SCHEMA_VERSION`).
 Documents produced by the exporter declare that schema version in their `mnx`
 header. The bundled `music21_mnx/mnx-schema.json` is the official schema at that
 revision; the test suite validates every exported document against it.
@@ -78,16 +78,32 @@ Covered (round-trips through `music21 → MNX → music21` and validates against
 bundled schema): parts, measures, voices, notes/chords/rests, pitches and
 accidental display, symbolic durations incl. dotted notes and tuplets, time/key
 signatures, clefs, beams (incl. partial/hook), ties, slurs, grace notes, part
-names, and barlines.
+names, barlines, and dynamics.
+
+Dynamics map onto MNX's dynamic groups as follows:
+
+| MNX dynamic group | music21 |
+| --- | --- |
+| `immediate` (`p`, `ff`) | `dynamics.Dynamic` |
+| `accent` (`sfz`, `fp`, `rfz`, `sfzp`) | `dynamics.Dynamic`, spelling rebuilt from `accentPrefix`/`value`/`accentSuffix`/`residualValue` |
+| `gradual` (hairpins) | `dynamics.Crescendo` / `Diminuendo`, spanning the notes at the group's `position` and `end` |
+| `relative` (`più p`) | *dropped* — no music21 equivalent |
+
+Measure repeats (`measureRepeat`, new in schema 27) have no music21 object
+either; the MNX dict rides along on `measure.editorial.mnxMeasureRepeat`, so it
+survives a round trip without being rendered as anything.
 
 Not yet round-tripped (recognized but dropped or approximated, marked `TODO` in
 the source):
 
 - **Exotic tie targets** — `crossVoice` / `crossJump` ties and ties to specific
   chord members. Export matches a tie to the next same-pitch note.
+- **Dynamic-group extras** — `relative` groups, the free-text `prefix`/`suffix`,
+  explicit SMuFL `glyphs`, `staff`/`staffEnd`/`voice` scoping, and
+  `visuallyContinues`. `orient` survives only as `above`/`below`.
 - multi-note tremolos (parsed as plain events), ottavas, jumps/segno and full
-  repeat structure, layouts/pages/systems, percussion kits, most dynamics and
-  `markings`, and lyrics.
+  repeat structure, layouts/pages/systems, percussion kits, `markings`
+  (incl. arpeggios), and lyrics.
 
 ## Development
 
@@ -99,7 +115,7 @@ uv run mypy music21_mnx
 uv run pylint music21_mnx
 ```
 
-The `examples/` directory holds the 49 example documents shipped with the MNX
+The `examples/` directory holds the 52 example documents shipped with the MNX
 spec, handy for experimentation:
 
 ```bash

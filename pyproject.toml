@@ -12,7 +12,7 @@ dynamic = [
 description = "MNX (W3C music notation JSON format) import and export for music21."
 readme = "README.md"
 license = "BSD-3-Clause"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -24,7 +24,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -34,7 +33,12 @@ classifiers = [
 ]
 
 dependencies = [
-    "music21>=10.3",
+    # Nothing here needs a v11 feature yet, so keep the floor at the newest
+    # release on PyPI: people can pip install and use this today.  A real floor
+    # (rather than a bare "music21") also stops pip from treating some ancient
+    # music21 already in the environment as good enough.  Development and CI run
+    # against music21 master instead, per [tool.uv.sources] below.
+    "music21>=10.5",
 ]
 
 [dependency-groups]
@@ -56,6 +60,11 @@ Homepage = "https://github.com/cuthbertLab/music21-mnx"
 
 [tool.uv]
 default-groups = ["dev"]
+
+# uv-only, and ignored by pip and by anything installing the published wheel:
+# it just decides where *this* checkout's music21 comes from.
+[tool.uv.sources]
+music21 = { git = "https://github.com/cuthbertLab/music21.git", rev = "8707fb6b53aac0636576019ca7d9a38e41a6635e" }
 
 [tool.hatch.version]
 path = "music21_mnx/__init__.py"
@@ -89,6 +98,12 @@ ignore = [
     'B904',  # "except" and then "raise without from"
     'B905',  # zip without strict=
 ]
+
+[tool.ruff.format]
+# A nested string uses the *other* quote than the f-string delimiter, e.g.
+# f'{d["key"]}'.  This is Ruff's default, but we pin it so the choice stays
+# explicit, matching music21.
+nested-string-quote-style = "alternating"
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = 'single'
