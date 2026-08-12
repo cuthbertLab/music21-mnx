@@ -41,8 +41,8 @@ You can always use the converter classes directly without registering at all:
 Versioning
 ==========
 
-This package's version tracks the MNX schema version it targets: ``0.17.x``
-follows MNX schema version 17 (see :data:`music21_mnx.base.MNX_SCHEMA_VERSION`).
+This package's version tracks the MNX schema version it targets: ``0.27.x``
+follows MNX schema version 27 (see :data:`music21_mnx.base.MNX_SCHEMA_VERSION`).
 Documents produced by the exporter declare that schema version in their ``mnx``
 header.
 
@@ -51,7 +51,7 @@ maintainer's direction; treat it as AI-assisted code pending human review.
 '''
 from __future__ import annotations
 
-__version__ = '0.17.0'
+__version__ = '0.27.0'
 
 __all__ = [
     'base',

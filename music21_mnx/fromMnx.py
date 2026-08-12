@@ -38,6 +38,7 @@ from music21 import chord
 from music21 import clef
 from music21 import common
 from music21 import duration
+from music21 import dynamics
 from music21 import instrument
 from music21 import key
 from music21 import metadata
@@ -52,15 +53,18 @@ from music21_mnx import base
 from music21_mnx.base import MNXException
 
 if t.TYPE_CHECKING:
-    from fractions import Fraction
-    from music21.common.types import StepName
+    from music21.common.types import OffsetQL, StepName
 
 
 # Map MNX side values to music21 placement values for slurs/ties.
 _SIDE_TO_PLACEMENT = {'up': 'above', 'down': 'below'}
 
+# MNX multi-staff-orientation values music21 can express as a placement.  'auto'
+# and 'between' have no music21 equivalent and leave the default in place.
+_ORIENT_TO_PLACEMENT = {'above': 'above', 'below': 'below'}
 
-def _fractionToQuarterLength(frac: list[int]) -> float | Fraction:
+
+def _fractionToQuarterLength(frac: list[int]) -> OffsetQL:
     '''
     Convert an MNX ``fraction`` (``[numerator, denominator]`` measured in whole
     notes) to a music21 quarter length.
@@ -102,9 +106,9 @@ class MNXImporter:
     'whole'
     '''
 
-    def __init__(self, dataString: str | dict[str, t.Any] = '') -> None:
-        self.src: str | dict[str, t.Any] = dataString
-        self.mnxData: dict[str, t.Any] = {}
+    def __init__(self, dataString: str | base.MNXObject = '') -> None:
+        self.src: str | base.MNXObject = dataString
+        self.mnxData: base.MNXObject = {}
         self.stream: stream.Score = stream.Score()
 
         # Pass-1 registries: MNX id -> music21 object it produced.
@@ -117,7 +121,13 @@ class MNXImporter:
         # (sourceGeneralNote, targetEventId, slurDict)
         self.pendingSlurs: list[tuple[note.GeneralNote, str, base.MNXSlur]] = []
         # raw top-level beam group dicts (their event ids resolve via the registry)
-        self.beamGroups: list[dict[str, t.Any]] = []
+        self.beamGroups: list[base.MNXObject] = []
+        # (part, measureIndex, startOffset, gradual dynamic group) — a hairpin,
+        # whose 'end' names a global measure by id, so it resolves in pass 2.
+        self.pendingWedges: list[
+            tuple[stream.Part, int, OffsetQL, base.MNXDynamicGroup]] = []
+        # global measure id -> its index in global.measures
+        self.globalMeasureIndexById: dict[str, int] = {}
 
     # -- top level ------------------------------------------------------------
 
@@ -148,6 +158,10 @@ class MNXImporter:
                 "Not a valid MNX document: missing required 'parts' or 'global' key.")
 
         globalMeasures: list[base.MNXMeasureGlobal] = doc.get('global', {}).get('measures', [])
+        for i, globalMeasure in enumerate(globalMeasures):
+            measureId = globalMeasure.get('id')
+            if measureId:
+                self.globalMeasureIndexById[measureId] = i
 
         self._parseMetadata()
 
@@ -191,6 +205,7 @@ class MNXImporter:
                 globalMeasures[i] if i < len(globalMeasures) else {})
             measure = self.parseMeasure(partMeasure, globalMeasure, measureNumber=i + 1)
             part.append(measure)
+            self.parseDynamics(partMeasure.get('dynamics', []), measure, part, i)
 
         return part
 
@@ -240,6 +255,13 @@ class MNXImporter:
         for beamGroup in partMeasure.get('beams', []):
             self.beamGroups.append(beamGroup)
 
+        measureRepeat = partMeasure.get('measureRepeat')
+        if measureRepeat is not None:
+            # A simile marking ("repeat the previous N measures").  music21 has no
+            # object for this, so carry the MNX dict on the measure's editorial,
+            # which the exporter writes back out unchanged.
+            measure.editorial.mnxMeasureRepeat = measureRepeat
+
         return measure
 
     def parseClef(self, positionedClef: base.MNXPositionedClef) -> tuple[clef.Clef, float]:
@@ -267,6 +289,82 @@ class MNXImporter:
             offset = float(_fractionToQuarterLength(position['fraction']))
         return clefObj, offset
 
+    # -- dynamics -------------------------------------------------------------
+
+    def parseDynamics(
+        self,
+        dynamicGroups: list[base.MNXDynamicGroup],
+        measure: stream.Measure,
+        part: stream.Part,
+        measureIndex: int,
+    ) -> None:
+        '''
+        Insert the measure's MNX dynamic groups into ``measure``.  Immediate and
+        accent groups become :class:`~music21.dynamics.Dynamic` objects right
+        away; gradual ones (hairpins) are queued for :meth:`resolveWedges`,
+        because their ``end`` points at another measure by id.
+
+        * New in v0.27.
+        '''
+        for group in dynamicGroups:
+            position = group.get('position')
+            if not position or 'fraction' not in position:
+                continue
+            offset = _fractionToQuarterLength(position['fraction'])
+
+            if group.get('type') == 'gradual':
+                self.pendingWedges.append((part, measureIndex, offset, group))
+                continue
+
+            text = self.dynamicGroupToText(group)
+            if text is None:
+                continue
+            dynamicObj = dynamics.Dynamic(text)
+            placement = _ORIENT_TO_PLACEMENT.get(group.get('orient', ''))
+            if placement is not None:
+                dynamicObj.placement = placement
+            measure.insert(offset, dynamicObj)
+
+    def dynamicGroupToText(self, group: base.MNXDynamicGroup) -> str | None:
+        '''
+        Spell an MNX dynamic group the way music21 writes dynamics, or return
+        ``None`` for one music21 cannot hold.
+
+        >>> from music21_mnx import fromMnx
+        >>> imp = fromMnx.MNXImporter()
+        >>> imp.dynamicGroupToText({'type': 'immediate', 'value': 'ff'})
+        'ff'
+        >>> imp.dynamicGroupToText({'type': 'accent', 'value': 'f'})
+        'sfz'
+        >>> imp.dynamicGroupToText(
+        ...     {'type': 'accent', 'value': 'f', 'accentPrefix': '',
+        ...      'accentSuffix': '', 'residualValue': 'p'})
+        'fp'
+
+        A ``'relative'`` group ("più p") has no music21 equivalent:
+
+        >>> imp.dynamicGroupToText({'type': 'relative', 'relativeValue': 'softer'}) is None
+        True
+
+        * New in v0.27.
+        '''
+        groupType = group.get('type')
+        if groupType == 'immediate':
+            return group.get('value')
+        if groupType == 'accent':
+            value = group.get('value')
+            if not value:
+                return None
+            return base.joinAccentDynamic(
+                value,
+                prefix=group.get('accentPrefix'),
+                suffix=group.get('accentSuffix'),
+                residual=group.get('residualValue', ''),
+            )
+        # TODO: 'relative' groups (più f / più p) have no music21 object; the
+        # free-text 'prefix'/'suffix' and 'glyphs' of any group are also dropped.
+        return None
+
     # -- sequence content -----------------------------------------------------
 
     def fillStreamWithSequence(
@@ -278,16 +376,16 @@ class MNXImporter:
         Append every content item of an MNX sequence to ``targetStream`` at the
         correct rhythmic offset.
         '''
-        offset: float | Fraction = 0.0
+        offset: OffsetQL = 0.0
         for item in sequenceData.get('content', []):
             offset = self.parseContentItem(targetStream, item, offset)
 
     def parseContentItem(
         self,
         targetStream: stream.Stream,
-        item: dict[str, t.Any],
-        offset: float | Fraction,
-    ) -> float | Fraction:
+        item: base.MNXObject,
+        offset: OffsetQL,
+    ) -> OffsetQL:
         '''
         Parse one item from a sequence's ``content`` list, insert the resulting
         object(s) into ``targetStream`` at ``offset``, and return the offset for
@@ -314,7 +412,7 @@ class MNXImporter:
             return offset
         raise MNXException(f'Unknown sequence content type: {itemType!r}')
 
-    def parseEvent(self, eventData: dict[str, t.Any]) -> note.GeneralNote:
+    def parseEvent(self, eventData: base.MNXObject) -> note.GeneralNote:
         '''
         Convert an MNX event into a :class:`~music21.note.Note`,
         :class:`~music21.chord.Chord`, or :class:`~music21.note.Rest`.
@@ -411,8 +509,8 @@ class MNXImporter:
     def parseGrace(
         self,
         targetStream: stream.Stream,
-        item: dict[str, t.Any],
-        offset: float | Fraction,
+        item: base.MNXObject,
+        offset: OffsetQL,
     ) -> None:
         '''
         Parse an MNX ``grace`` object — a small sequence of events with no
@@ -434,9 +532,9 @@ class MNXImporter:
     def parseTuplet(
         self,
         targetStream: stream.Stream,
-        item: dict[str, t.Any],
-        offset: float | Fraction,
-    ) -> float | Fraction:
+        item: base.MNXObject,
+        offset: OffsetQL,
+    ) -> OffsetQL:
         '''
         Parse an MNX ``tuplet`` object, applying a :class:`~music21.duration.Tuplet`
         to each event in its ``content`` and inserting them at the running offset.
@@ -467,9 +565,9 @@ class MNXImporter:
     def parseSpace(
         self,
         targetStream: stream.Stream,
-        item: dict[str, t.Any],
-        offset: float | Fraction,
-    ) -> float | Fraction:
+        item: base.MNXObject,
+        offset: OffsetQL,
+    ) -> OffsetQL:
         '''
         Parse an MNX ``space`` (an invisible gap).  We insert a hidden
         :class:`~music21.note.Rest` so the stream stays rhythmically complete.
@@ -480,7 +578,7 @@ class MNXImporter:
         targetStream.insert(offset, spacer)
         return common.opFrac(offset + quarterLength)
 
-    def _registerEvent(self, eventData: dict[str, t.Any], obj: note.GeneralNote) -> None:
+    def _registerEvent(self, eventData: base.MNXObject, obj: note.GeneralNote) -> None:
         eventId = eventData.get('id')
         if eventId:
             self.m21EventById[eventId] = obj
@@ -495,6 +593,7 @@ class MNXImporter:
         self.resolveTies()
         self.resolveSlurs()
         self.resolveBeams()
+        self.resolveWedges()
 
     def resolveTies(self) -> None:
         '''
@@ -552,7 +651,7 @@ class MNXImporter:
         instructions: dict[int, list[tuple[int, str, str | None]]] = {}
         byId: dict[int, note.GeneralNote] = {}
 
-        def applyLevel(beamGroup: dict[str, t.Any], level: int) -> None:
+        def applyLevel(beamGroup: base.MNXObject, level: int) -> None:
             eventIds = beamGroup.get('events', [])
             count = len(eventIds)
             for i, eventId in enumerate(eventIds):
@@ -587,3 +686,90 @@ class MNXImporter:
             for _level, beamType, direction in sorted(beamInstrs, key=lambda x: x[0]):
                 beamsObj.append(beamType, direction)
             generalNote.beams = beamsObj
+
+    def resolveWedges(self) -> None:
+        '''
+        Turn queued ``'gradual'`` dynamic groups into
+        :class:`~music21.dynamics.Crescendo` / :class:`~music21.dynamics.Diminuendo`
+        spanners, resolving each one's ``end`` (a global measure id plus a
+        rhythmic position) to the note it lands on.
+
+        * New in v0.27.
+        '''
+        for part, measureIndex, startOffset, group in self.pendingWedges:
+            wedgeClassName = base.MNX_WEDGE_TO_M21_CLASS.get(group.get('wedgeType', ''))
+            end = group.get('end')
+            if wedgeClassName is None or not end:
+                # 'wedgeType' and 'end' are both required for a gradual group;
+                # a document missing either is not something we can span.
+                continue
+            endIndex = self.globalMeasureIndexById.get(end.get('measure', ''))
+            if endIndex is None:
+                continue
+            endPosition = end.get('position', {})
+            if 'fraction' not in endPosition:
+                continue
+            endOffset = _fractionToQuarterLength(endPosition['fraction'])
+
+            startNote = self._noteAtOrAfter(part, measureIndex, startOffset)
+            endNote = self._noteAtOrBefore(part, endIndex, endOffset)
+            if startNote is None or endNote is None or startNote is endNote:
+                continue
+
+            wedge = getattr(dynamics, wedgeClassName)()
+            wedge.addSpannedElements([startNote, endNote])
+            placement = _ORIENT_TO_PLACEMENT.get(group.get('orient', ''))
+            if placement is not None:
+                wedge.placement = placement
+            self.stream.insert(0, wedge)
+
+    def _notesWithOffsets(
+        self,
+        part: stream.Part,
+        measureIndex: int,
+    ) -> list[tuple[OffsetQL, note.GeneralNote]]:
+        '''
+        Every note/rest of one measure of ``part``, paired with its offset from
+        the start of the measure and sorted by that offset.  Voices are flattened
+        in, so a wedge can span notes in any voice.
+        '''
+        measures = list(part.getElementsByClass(stream.Measure))
+        if not 0 <= measureIndex < len(measures):
+            return []
+        measure = measures[measureIndex]
+        found: list[tuple[OffsetQL, note.GeneralNote]] = [
+            (measure.elementOffset(n), n)
+            for n in measure.getElementsByClass(note.GeneralNote)
+        ]
+        for voiceStream in measure.getElementsByClass(stream.Voice):
+            voiceOffset = measure.elementOffset(voiceStream)
+            found.extend(
+                (common.opFrac(voiceOffset + voiceStream.elementOffset(n)), n)
+                for n in voiceStream.getElementsByClass(note.GeneralNote)
+            )
+        found.sort(key=lambda pair: pair[0])
+        return found
+
+    def _noteAtOrAfter(
+        self,
+        part: stream.Part,
+        measureIndex: int,
+        offset: OffsetQL,
+    ) -> note.GeneralNote | None:
+        found = self._notesWithOffsets(part, measureIndex)
+        for noteOffset, generalNote in found:
+            if noteOffset >= offset:
+                return generalNote
+        return found[-1][1] if found else None
+
+    def _noteAtOrBefore(
+        self,
+        part: stream.Part,
+        measureIndex: int,
+        offset: OffsetQL,
+    ) -> note.GeneralNote | None:
+        found = self._notesWithOffsets(part, measureIndex)
+        for noteOffset, generalNote in reversed(found):
+            if noteOffset <= offset:
+                return generalNote
+        return found[0][1] if found else None

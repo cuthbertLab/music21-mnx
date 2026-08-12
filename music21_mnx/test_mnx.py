@@ -24,6 +24,7 @@ from music21 import bar
 from music21 import chord
 from music21 import clef
 from music21 import converter
+from music21 import dynamics
 from music21 import key
 from music21 import meter
 from music21 import note
@@ -219,8 +220,104 @@ TWO_PARTS = '''
 }
 '''
 
+DYNAMICS = '''
+{
+  "mnx": {"version": 27},
+  "global": {"measures": [{"time": {"count": 4, "unit": 4}}]},
+  "parts": [{"measures": [{
+    "dynamics": [
+      {"position": {"fraction": [0, 1]}, "type": "immediate", "value": "ff"},
+      {"position": {"fraction": [3, 4]}, "type": "immediate", "value": "ppp", "orient": "above"}
+    ],
+    "sequences": [{"content": [
+      {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "C", "octave": 4}}]},
+      {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "E", "octave": 4}}]},
+      {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "G", "octave": 4}}]},
+      {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "C", "octave": 5}}]}
+    ]}]
+  }]}]
+}
+'''
+
+# The four accent spellings from the spec's dynamics-accents example, plus the
+# two residualValue forms (fp and sfzp).
+DYNAMIC_ACCENTS = '''
+{
+  "mnx": {"version": 27},
+  "global": {"measures": [{"time": {"count": 4, "unit": 4}}, {}]},
+  "parts": [{"measures": [
+    {"dynamics": [
+       {"position": {"fraction": [0, 1]}, "type": "accent", "value": "f"},
+       {"position": {"fraction": [1, 4]}, "type": "accent", "accentPrefix": "r", "value": "f"},
+       {"position": {"fraction": [1, 2]}, "type": "accent", "accentPrefix": "", "value": "f"},
+       {"position": {"fraction": [3, 4]}, "type": "accent", "value": "f", "accentSuffix": ""}
+     ],
+     "sequences": [{"content": [
+       {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "C", "octave": 4}}]},
+       {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "D", "octave": 4}}]},
+       {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "E", "octave": 4}}]},
+       {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "F", "octave": 4}}]}
+     ]}]},
+    {"dynamics": [
+       {"position": {"fraction": [0, 1]}, "type": "accent", "accentPrefix": "",
+        "value": "f", "accentSuffix": "", "residualValue": "p"},
+       {"position": {"fraction": [1, 2]}, "type": "accent", "value": "f", "residualValue": "p"}
+     ],
+     "sequences": [{"content": [
+       {"duration": {"base": "half"}, "notes": [{"pitch": {"step": "G", "octave": 4}}]},
+       {"duration": {"base": "half"}, "notes": [{"pitch": {"step": "E", "octave": 4}}]}
+     ]}]}
+  ]}]
+}
+'''
+
+HAIRPIN = '''
+{
+  "mnx": {"version": 27},
+  "global": {"measures": [
+    {"id": "m1", "time": {"count": 4, "unit": 4}},
+    {"id": "m2"}
+  ]},
+  "parts": [{"measures": [
+    {"dynamics": [
+       {"position": {"fraction": [0, 1]}, "type": "immediate", "value": "p"},
+       {"position": {"fraction": [1, 4]}, "type": "gradual", "wedgeType": "increasing",
+        "end": {"measure": "m2", "position": {"fraction": [1, 2]}}}
+     ],
+     "sequences": [{"content": [
+       {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "C", "octave": 4}}]},
+       {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "D", "octave": 4}}]},
+       {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "E", "octave": 4}}]},
+       {"duration": {"base": "quarter"}, "notes": [{"pitch": {"step": "F", "octave": 4}}]}
+     ]}]},
+    {"sequences": [{"content": [
+       {"duration": {"base": "half"}, "notes": [{"pitch": {"step": "G", "octave": 4}}]},
+       {"duration": {"base": "half"}, "notes": [{"pitch": {"step": "A", "octave": 4}}]}
+     ]}]}
+  ]}]
+}
+'''
+
+MEASURE_REPEAT = '''
+{
+  "mnx": {"version": 27},
+  "global": {"measures": [{"time": {"count": 4, "unit": 4}}, {}]},
+  "parts": [{"measures": [
+    {"sequences": [{"content": [
+      {"duration": {"base": "whole"}, "notes": [{"pitch": {"step": "C", "octave": 5}}]}
+    ]}]},
+    {"measureRepeat": {"number": 1, "counter": {"count": 2, "orient": "above"}},
+     "sequences": [{"content": []}]}
+  ]}]
+}
+'''
+
 ALL_EXAMPLES = {
     'hello': HELLO_WORLD,
+    'dynamics': DYNAMICS,
+    'dynamicAccents': DYNAMIC_ACCENTS,
+    'hairpin': HAIRPIN,
+    'measureRepeat': MEASURE_REPEAT,
     'chordRest': CHORD_AND_REST,
     'dotted': DOTTED,
     'keyAccidental': KEY_AND_ACCIDENTAL,
@@ -235,8 +332,8 @@ ALL_EXAMPLES = {
 
 def _roundTripSignature(score: stream.Score):
     '''
-    A comparable fingerprint of a score's pitches, durations, tie-count, and
-    slur-count — enough to detect content drift across a round trip.
+    A comparable fingerprint of a score's pitches, durations, ties, slurs,
+    dynamics, and hairpins — enough to detect content drift across a round trip.
     '''
     pitches = []
     durs = []
@@ -248,7 +345,17 @@ def _roundTripSignature(score: stream.Score):
             pitches.append(','.join(p.nameWithOctave for p in n.pitches))
     ties = sum(1 for n in score.recurse().notes if n.tie is not None)
     slurs = len(list(score.recurse().getElementsByClass(spanner.Slur)))
-    return (pitches, durs, ties, slurs)
+    dynamicValues = [d.value for d in score.recurse().getElementsByClass(dynamics.Dynamic)]
+    wedges = [
+        (type(w).__name__, [n.nameWithOctave for n in w.getSpannedElements()])
+        for w in score.recurse().getElementsByClass(dynamics.DynamicWedge)
+    ]
+    repeats = [
+        m.editorial.get('mnxMeasureRepeat')
+        for m in score.recurse().getElementsByClass(stream.Measure)
+        if m.editorial.get('mnxMeasureRepeat') is not None
+    ]
+    return (pitches, durs, ties, slurs, dynamicValues, wedges, repeats)
 
 
 class Test(unittest.TestCase):
@@ -349,6 +456,112 @@ class Test(unittest.TestCase):
         self.assertEqual(score.parts[1].partName, 'Bass')
         bassClef = score.parts[1].recurse().getElementsByClass(clef.BassClef).first()
         self.assertIsNotNone(bassClef)
+
+    def testDynamicsImmediate(self):
+        score = MNXImporter(DYNAMICS).run()
+        found = list(score.recurse().getElementsByClass(dynamics.Dynamic))
+        self.assertEqual([d.value for d in found], ['ff', 'ppp'])
+        measure = score.recurse().getElementsByClass(stream.Measure).first()
+        self.assertEqual(measure.elementOffset(found[0]), 0.0)
+        self.assertEqual(measure.elementOffset(found[1]), 3.0)
+        # 'orient' maps onto music21 placement; the default stays untouched.
+        self.assertEqual(found[1].placement, 'above')
+
+    def testDynamicAccentSpellings(self):
+        score = MNXImporter(DYNAMIC_ACCENTS).run()
+        found = list(score.recurse().getElementsByClass(dynamics.Dynamic))
+        self.assertEqual(
+            [d.value for d in found], ['sfz', 'rfz', 'fz', 'sf', 'fp', 'sfzp'])
+
+    def testDynamicAccentsSurviveExport(self):
+        score = MNXImporter(DYNAMIC_ACCENTS).run()
+        doc = MNXExporter(score).export()
+        groups = doc['parts'][0]['measures'][0]['dynamics']
+        self.assertEqual([g['type'] for g in groups], ['accent'] * 4)
+        # We always write accentPrefix/accentSuffix rather than relying on MNX's
+        # 's'/'z' defaults, so the spelling is unambiguous.
+        self.assertEqual(
+            [(g['accentPrefix'], g['value'], g['accentSuffix']) for g in groups],
+            [('s', 'f', 'z'), ('r', 'f', 'z'), ('', 'f', 'z'), ('s', 'f', '')])
+        secondMeasure = doc['parts'][0]['measures'][1]['dynamics']
+        self.assertEqual([g.get('residualValue') for g in secondMeasure], ['p', 'p'])
+
+    def testHairpinImport(self):
+        score = MNXImporter(HAIRPIN).run()
+        wedges = list(score.recurse().getElementsByClass(dynamics.DynamicWedge))
+        self.assertEqual(len(wedges), 1)
+        self.assertIsInstance(wedges[0], dynamics.Crescendo)
+        spanned = wedges[0].getSpannedElements()
+        # Starts on the note at 1/4 of measure 1, ends on the note at 1/2 of m2.
+        self.assertEqual(spanned[0].nameWithOctave, 'D4')
+        self.assertEqual(spanned[-1].nameWithOctave, 'A4')
+
+    def testHairpinExportNamesEndMeasureById(self):
+        score = MNXImporter(HAIRPIN).run()
+        doc = MNXExporter(score).export()
+        gradual = [g for g in doc['parts'][0]['measures'][0]['dynamics']
+                   if g['type'] == 'gradual']
+        self.assertEqual(len(gradual), 1)
+        self.assertEqual(gradual[0]['wedgeType'], 'increasing')
+        endMeasureId = gradual[0]['end']['measure']
+        self.assertEqual(gradual[0]['end']['position'], {'fraction': [1, 2]})
+        # The id must actually resolve to a measure in global.measures.
+        globalIds = [m.get('id') for m in doc['global']['measures']]
+        self.assertIn(endMeasureId, globalIds)
+        self.assertEqual(globalIds.index(endMeasureId), 1)
+
+    def testDiminuendoFromMusic21(self):
+        score = converter.parse('tinyNotation: 4/4 c4 d4 e4 f4')
+        notes = list(score.recurse().notes)
+        wedge = dynamics.Diminuendo()
+        wedge.addSpannedElements([notes[0], notes[-1]])
+        score.insert(0, wedge)
+        doc = MNXExporter(score).export()
+        gradual = [g for g in doc['parts'][0]['measures'][0]['dynamics']
+                   if g['type'] == 'gradual']
+        self.assertEqual(gradual[0]['wedgeType'], 'decreasing')
+        self.assertEqual(gradual[0]['position'], {'fraction': [0, 1]})
+        self.assertEqual(gradual[0]['end']['position'], {'fraction': [3, 4]})
+
+    def testUnrepresentableDynamicIsDropped(self):
+        score = converter.parse('tinyNotation: 4/4 c4 d4 e4 f4')
+        score.recurse().getElementsByClass(stream.Measure).first().insert(
+            0.0, dynamics.Dynamic('cresc.'))
+        doc = MNXExporter(score).export()
+        self.assertNotIn('dynamics', doc['parts'][0]['measures'][0])
+
+    def testRelativeDynamicIsSkipped(self):
+        # 'relative' groups (più p) have no music21 equivalent; the import must
+        # drop them rather than inventing a Dynamic.
+        src = DYNAMICS.replace(
+            '{"position": {"fraction": [0, 1]}, "type": "immediate", "value": "ff"}',
+            '{"position": {"fraction": [0, 1]}, "type": "relative", "relativeValue": "softer"}')
+        score = MNXImporter(src).run()
+        self.assertEqual(
+            [d.value for d in score.recurse().getElementsByClass(dynamics.Dynamic)], ['ppp'])
+
+    def testMeasureRepeatRoundTrip(self):
+        score = MNXImporter(MEASURE_REPEAT).run()
+        measures = list(score.recurse().getElementsByClass(stream.Measure))
+        self.assertIsNone(measures[0].editorial.get('mnxMeasureRepeat'))
+        self.assertEqual(
+            measures[1].editorial.get('mnxMeasureRepeat'),
+            {'number': 1, 'counter': {'count': 2, 'orient': 'above'}})
+        doc = MNXExporter(score).export()
+        self.assertEqual(
+            doc['parts'][0]['measures'][1]['measureRepeat'],
+            {'number': 1, 'counter': {'count': 2, 'orient': 'above'}})
+
+    def testAccentSplitAndJoinAreInverses(self):
+        for text in ('sfz', 'rfz', 'fz', 'sf', 'fp', 'sfzp', 'sffz'):
+            with self.subTest(dynamic=text):
+                parts = base.splitAccentDynamic(text)
+                self.assertIsNotNone(parts, f'{text} should parse as an accent')
+                prefix, value, suffix, residual = parts
+                self.assertEqual(
+                    base.joinAccentDynamic(
+                        value, prefix=prefix, suffix=suffix, residual=residual),
+                    text)
 
     def testMissingRequiredKeysRaises(self):
         with self.assertRaises(MNXException):
