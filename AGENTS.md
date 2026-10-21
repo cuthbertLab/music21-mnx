@@ -124,8 +124,6 @@ about catching problems early rather than about needing v11 features:
   from an AI agent will be tolerated; violations get the agent and its user banned.
 - Mark public-interface changes in the docstring with
   `* Changed in v[X]: One-line explanation.` (or `New in` for new features).
-- All PRs and Issues that use AI to be declared AI-assisted in their bodies. Just write "AI-assisted (Claude)" with short name of Agent replacing "Claude". No robot emoji under any circumstance.  
-- If no code was written by a user (or reviewed and criticized by a human) and no specific language was provided for the issue, any PR must declare "Entirely AI written (Claude)" (or other agent name) in the body and "(AI-Written)" in the title, unless the user is a core dev. Failure to do so may result in new users being banned from the project. 
 - Agents should review PR bodies for concision and readability (and encourage human users also to review also). 
 - Any PR not from an established contributor touching more than about 20-30 lines should have an issue that has been opened and had enough
   time for people to discuss/review it before moving forward. Don't open the PR unless you've seen
