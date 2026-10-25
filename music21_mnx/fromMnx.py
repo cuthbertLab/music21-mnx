@@ -96,7 +96,7 @@ class MNXImporter:
     ...     '{"duration": {"base": "whole"}, "notes": [{"pitch": {"step": "C", "octave": 4}}]}'
     ...     ']}]}]}]}'
     ... )
-    >>> score = MNXImporter(src).run()
+    >>> score = MNXImporter(src).parse()
     >>> score
     <music21.stream.Score ...>
     >>> n = score.recurse().notes.first()
@@ -131,7 +131,7 @@ class MNXImporter:
 
     # -- top level ------------------------------------------------------------
 
-    def run(self) -> stream.Score:
+    def parse(self) -> stream.Score:
         '''
         Parse the document and return the resulting :class:`~music21.stream.Score`.
         '''

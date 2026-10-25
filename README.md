@@ -39,7 +39,7 @@ Advanced users can also use the converter classes directly without calling regis
 ```python
 from music21_mnx import MNXImporter, MNXExporter
 
-score = MNXImporter(json_string_or_dict).run()
+score = MNXImporter(json_string_or_dict).parse()
 mnx_dict = MNXExporter(score).export()    # plain dict
 mnx_text = MNXExporter(score).toJson()
 ```

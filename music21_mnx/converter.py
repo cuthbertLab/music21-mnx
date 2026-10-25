@@ -52,7 +52,7 @@ class ConverterMNX(SubConverter):
         Convert a string containing an MNX (JSON) document into music21 objects.
         '''
         from music21_mnx import MNXImporter
-        self.stream = MNXImporter(dataString).run()
+        self.stream = MNXImporter(dataString).parse()
         return self.stream
 
     def parseFile(

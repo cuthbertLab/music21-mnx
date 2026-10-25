@@ -369,7 +369,7 @@ class Test(unittest.TestCase):
         music21_mnx.unregister()
 
     def testHelloWorld(self):
-        score = MNXImporter(HELLO_WORLD).run()
+        score = MNXImporter(HELLO_WORLD).parse()
         self.assertEqual(len(score.parts), 1)
         notes = list(score.recurse().notes)
         self.assertEqual(len(notes), 1)
@@ -382,11 +382,11 @@ class Test(unittest.TestCase):
 
     def testParseFromDict(self):
         # The importer should accept an already-parsed dict, not only a string.
-        score = MNXImporter(json.loads(HELLO_WORLD)).run()
+        score = MNXImporter(json.loads(HELLO_WORLD)).parse()
         self.assertEqual(len(score.recurse().notes), 1)
 
     def testChordAndRest(self):
-        score = MNXImporter(CHORD_AND_REST).run()
+        score = MNXImporter(CHORD_AND_REST).parse()
         chords = list(score.recurse().getElementsByClass(chord.Chord))
         self.assertEqual(len(chords), 1)
         self.assertEqual([p.nameWithOctave for p in chords[0].pitches], ['C4', 'E4', 'G4'])
@@ -395,14 +395,14 @@ class Test(unittest.TestCase):
         self.assertEqual(rests[0].duration.quarterLength, 2.0)
 
     def testDottedDurations(self):
-        score = MNXImporter(DOTTED).run()
+        score = MNXImporter(DOTTED).parse()
         notes = list(score.recurse().notes)
         self.assertEqual(notes[0].duration.type, 'quarter')
         self.assertEqual(notes[0].duration.dots, 1)
         self.assertEqual(notes[0].duration.quarterLength, 1.5)
 
     def testKeyAndAccidental(self):
-        score = MNXImporter(KEY_AND_ACCIDENTAL).run()
+        score = MNXImporter(KEY_AND_ACCIDENTAL).parse()
         ks = score.recurse().getElementsByClass(key.KeySignature).first()
         self.assertEqual(ks.sharps, -2)
         n = score.recurse().notes.first()
@@ -410,7 +410,7 @@ class Test(unittest.TestCase):
         self.assertTrue(n.pitch.accidental.displayStatus)
 
     def testTies(self):
-        score = MNXImporter(TIES).run()
+        score = MNXImporter(TIES).parse()
         tiedNotes = [n for n in score.recurse().notes if n.tie is not None]
         # Two tie pairs: one within m1->m1 and one across m1->m2.
         self.assertEqual(len(tiedNotes), 4)
@@ -419,7 +419,7 @@ class Test(unittest.TestCase):
         self.assertIn('stop', types)
 
     def testSlurs(self):
-        score = MNXImporter(SLURS).run()
+        score = MNXImporter(SLURS).parse()
         slurs = list(score.recurse().getElementsByClass(spanner.Slur))
         self.assertEqual(len(slurs), 1)
         spanned = slurs[0].getSpannedElements()
@@ -428,12 +428,12 @@ class Test(unittest.TestCase):
         self.assertEqual(slurs[0].placement, 'above')
 
     def testMultiVoice(self):
-        score = MNXImporter(MULTI_VOICE).run()
+        score = MNXImporter(MULTI_VOICE).parse()
         voices = list(score.recurse().getElementsByClass(stream.Voice))
         self.assertEqual(len(voices), 2)
 
     def testTuplet(self):
-        score = MNXImporter(TUPLET).run()
+        score = MNXImporter(TUPLET).parse()
         tupletNotes = [n for n in score.recurse().notes if n.duration.tuplets]
         self.assertEqual(len(tupletNotes), 3)
         firstTuplet = tupletNotes[0].duration.tuplets[0]
@@ -443,14 +443,14 @@ class Test(unittest.TestCase):
         self.assertAlmostEqual(float(tupletNotes[0].duration.quarterLength), 1 / 3)
 
     def testBeams(self):
-        score = MNXImporter(BEAMS).run()
+        score = MNXImporter(BEAMS).parse()
         beamed = [n for n in score.recurse().notes if len(n.beams)]
         self.assertEqual(len(beamed), 4)
         self.assertEqual(beamed[0].beams.beamsList[0].type, 'start')
         self.assertEqual(beamed[-1].beams.beamsList[0].type, 'stop')
 
     def testTwoParts(self):
-        score = MNXImporter(TWO_PARTS).run()
+        score = MNXImporter(TWO_PARTS).parse()
         self.assertEqual(len(score.parts), 2)
         self.assertEqual(score.parts[0].partName, 'Melody')
         self.assertEqual(score.parts[1].partName, 'Bass')
@@ -565,7 +565,7 @@ class Test(unittest.TestCase):
 
     def testMissingRequiredKeysRaises(self):
         with self.assertRaises(MNXException):
-            MNXImporter('{"mnx": {"version": 1}}').run()
+            MNXImporter('{"mnx": {"version": 1}}').parse()
 
     def testExportTinyNotation(self):
         score = converter.parse('tinyNotation: 4/4 c4 d4 e4 f4')
@@ -627,9 +627,9 @@ class Test(unittest.TestCase):
     def testRoundTripAllExamples(self):
         for name, src in ALL_EXAMPLES.items():
             with self.subTest(example=name):
-                score1 = MNXImporter(src).run()
+                score1 = MNXImporter(src).parse()
                 doc = MNXExporter(score1).export()
-                score2 = MNXImporter(doc).run()
+                score2 = MNXImporter(doc).parse()
                 self.assertEqual(
                     _roundTripSignature(score1),
                     _roundTripSignature(score2),
@@ -689,7 +689,7 @@ class Test(unittest.TestCase):
     def testTinyNotationRoundTrip(self):
         score1 = converter.parse('tinyNotation: 3/4 c4 d8 e8 f4')
         doc = MNXExporter(score1).export()
-        score2 = MNXImporter(doc).run()
+        score2 = MNXImporter(doc).parse()
         notes1 = [n.nameWithOctave for n in score1.recurse().notes]
         notes2 = [n.nameWithOctave for n in score2.recurse().notes]
         self.assertEqual(notes1, notes2)
@@ -713,7 +713,7 @@ class Test(unittest.TestCase):
 
         for name, src in ALL_EXAMPLES.items():
             with self.subTest(example=name):
-                score = MNXImporter(src).run()
+                score = MNXImporter(src).parse()
                 doc = MNXExporter(score).export()
                 errors = list(validator.iter_errors(doc))
                 self.assertEqual(errors, [], f'{name} export is schema-invalid: '
